@@ -23,13 +23,11 @@ class indication(object):
             self.driver = webdriver.Chrome(executable_path="./drivers/chromedriver", options=options)
             self.driver.implicitly_wait(30)
         except Exception as e:
-            error_str = "Error: can't connect to page: {0}".format(e.message)
-            print(error_str)
-            return None
+            return self._setup_error("can't connect to page: {0}".format(e.message), "")
 
-    def _setup_error(self, error_str):
+    def _setup_error(self, error_str, name=""):
         self.error = error_str
-        print("Error: {0}".format(error_str))
+        print("{0}: Error: {1}".format(error_str, name))
         return None
 
     def _get_regex_group(self, text, regex):
@@ -51,7 +49,7 @@ class indication(object):
             box = wait.until(EC.presence_of_element_located((By.ID, "searchresults")))
             source = box.get_attribute("innerHTML").encode("utf-8")
         except Exception as e:
-            return self._setup_error("can't parse search page: {0}".format(e.message))
+            return self._setup_error("can't parse search page: {0}".format(e.message, name))
         soup = BeautifulSoup(source, self.parser)
         results = soup.find_all("div", {"class": "search-result"})
         re_str = "\s*([^\(\)\:]+)\s?"
@@ -68,7 +66,7 @@ class indication(object):
                     drug_name = self._get_regex_group(url_str, re_str).strip()
                     url = self.base_url + result.ul.a["data-ng-href"]
                     return drug_name, url
-        return self._setup_error("can't find drug")
+        return self._setup_error("can't find drug", name)
 
     def get_indications(self, url, name):
         indications = []
@@ -79,7 +77,7 @@ class indication(object):
             box = wait.until(EC.presence_of_element_located((By.ID, "topicContent")))
             source = box.get_attribute("innerHTML").encode("utf-8")
         except Exception as e:
-            return self._setup_error("can't parse indication page: {0}".format(e.message))
+            return self._setup_error("can't parse indication page: {0}".format(e.message), name)
         soup = BeautifulSoup(source, self.parser)
         drug_info = soup.find("div", {"class": "block doa drugH1Div"})
         if not drug_info:
@@ -87,7 +85,7 @@ class indication(object):
             parsed_name = parsed_name.replace(" ", "_")
             self._text_to_file(source, "./{0}_source.html".format(parsed_name))
             self.driver.get_screenshot_as_file("./{0}_screen.png".format(parsed_name))
-            return self._setup_error("can't parse webpage: can't find information")
+            return self._setup_error("can't parse webpage: can't find information", name)
         dosages = drug_info.find_all("p", \
                                      {"style": re.compile("text-indent:-2em;margin-left:2em")}) \
                   + drug_info.find_all("p", \
@@ -105,7 +103,7 @@ class indication(object):
             parsed_name = parsed_name.replace(" ", "_")
             self._text_to_file(source, "./{0}_source.html".format(parsed_name))
             self.driver.get_screenshot_as_file("./{0}_screen.png".format(parsed_name))
-            return self._setup_error("can't parse webpage: can't find indications")
+            return self._setup_error("can't parse webpage: can't find indications", name)
         re_str = "\s*([^\(\)\:]+)\s?"
         for symptom in symptoms:
             if symptom.b:

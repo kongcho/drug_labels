@@ -50,9 +50,10 @@ class disease(object):
             failed.append([drug, i.error])
         for drug in drugs:
             result = i.get_drug_indications(drug)
-            if result:
+            if result and result[1]:
+                result[1] = self._format_arr(result[1])
                 result = [drug] + result + [i.url]
-                results.append(self._format_arr(result))
+                results.append(result)
                 print result
             else:
                 failed.append([drug, i.error])

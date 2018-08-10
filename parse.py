@@ -27,7 +27,7 @@ class indication(object):
 
     def _setup_error(self, error_str, name=""):
         self.error = error_str
-        print("{0}: Error: {1}".format(error_str, name))
+        print("Error: {0} - {1}".format(name, error_str))
         return None
 
     def _get_regex_group(self, text, regex):
@@ -49,7 +49,7 @@ class indication(object):
             box = wait.until(EC.presence_of_element_located((By.ID, "searchresults")))
             source = box.get_attribute("innerHTML").encode("utf-8")
         except Exception as e:
-            return self._setup_error("can't parse search page: {0}".format(e.message, name))
+            return self._setup_error("can't parse search page".format(e.message), name)
         soup = BeautifulSoup(source, self.parser)
         results = soup.find_all("div", {"class": "search-result"})
         re_str = "\s*([^\(\)\:]+)\s?"
@@ -61,9 +61,9 @@ class indication(object):
                 return drug_name, url
         for result in results:
             if result.span:
-                url_str = result.span.contents[0]
+                url_str = result.span.contents[0].encode("utf-8")
                 if "drug information" in url_str.lower() and "patient" not in url_str.lower():
-                    drug_name = self._get_regex_group(url_str, re_str).strip()
+                    drug_name = self._get_regex_group(url_str, re_str).strip().encode("utf-8")
                     url = self.base_url + result.ul.a["data-ng-href"]
                     return drug_name, url
         return self._setup_error("can't find drug", name)
@@ -108,7 +108,7 @@ class indication(object):
         for symptom in symptoms:
             if symptom.b:
                 drug_str = symptom.b.contents[0]
-                drug = self._get_regex_group(drug_str, re_str).strip()
+                drug = self._get_regex_group(drug_str, re_str).strip().encode("utf-8")
                 if drug.lower() not in ["note", "oral"] and drug not in indications:
                     indications.append(drug)
         return indications

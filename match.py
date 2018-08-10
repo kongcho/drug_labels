@@ -42,21 +42,23 @@ class disease(object):
                 drugs.append(drug)
         return drugs
 
-    def get_fda_indications(self, drugs):
+    def get_fda_indications(self, drugs, find, ffail):
         results = []
         failed = []
         i = indication()
         if i is None:
             failed.append([drug, i.error])
-        for drug in drugs:
+        for icount, drug in enumerate(drugs):
             result = i.get_drug_indications(drug)
             if result and result[1]:
                 result[1] = self._format_arr(result[1])
                 result = [drug] + result + [i.url]
                 results.append(result)
-                print result
+                d._arr_to_csv_2d([result], find, False)
             else:
-                failed.append([drug, i.error])
+                fails = [drug, i.error]
+                failed.append(fails)
+                d._arr_to_csv_2d([fails], ffail, False)
         return results, failed
 
     def _arr_to_csv_2d(self, arr, fout, replace=True):
@@ -70,15 +72,30 @@ class disease(object):
                 w.writerow(row)
         return 0
 
-if __name__ == "__main__":
-    drug_names = ["accolate"]
-    anita_dir = "./data/Indication_USA.dta"
-    fda_dir = "./data/Generic Drug Indications.csv"
+    def get_first_row(self,fin):
+        arr = []
+        with open(fin, "r") as f:
+            r = csv.reader(f, delimiter=",", skipinitialspace=True)
+            for row in r:
+                arr.append(row[0])
+        return arr
+
+def get_indications():
     d = disease()
-    # data_drugs = d._lower_arr(d.get_database_indications(anita_dir))
+
+    # gets indications for fda drugs based to UpToDate
+    fda_dir = "./data/Generic Drug Indications.csv"
     fda_drugs = d._lower_arr(d.get_fda_drugs(fda_dir))
-    results, failed = d.get_fda_indications(fda_drugs)
-    # results: [drug_name, indications]
-    d._arr_to_csv_2d(results, "./results/indications.csv")
-    # failed: ([da_drug_name, error_code]
-    d._arr_to_csv_2d(failed, "./results/failed.csv")
+    results, failed = d.get_fda_indications(fda_drugs, \
+                                            "./results/indications.csv", "./results/failed.csv")
+
+    # results: [fda_drug_name, chemical_name, indications, info_url]
+    d._arr_to_csv_2d(results, "./results/indications_all.csv")
+    # failed: ([fda_drug_name, error_code]
+    d._arr_to_csv_2d(failed, "./results/failed_all.csv")
+
+if __name__ == "__main__":
+    d = disease()
+
+    anita_dir = "./data/Indication_USA.dta"
+    data_drugs = d._lower_arr(d.get_database_indications(anita_dir))

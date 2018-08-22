@@ -3,6 +3,9 @@ test/
 dict/
 drivers/
 
+results/bak
+results/old
+
 *pyc
 *html
 *png

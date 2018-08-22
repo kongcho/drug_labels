@@ -6,10 +6,10 @@ from fuzzywuzzy import fuzz
 
 # Parse through list of indications
 class fda_drug(object):
-    def __init__(self, drug, indications, date):
+    def __init__(self, drug, indications):
         self.drug = drug
         self.unparsed_ind = indications
-        self.date = date
+        self.data = []
 
     def _get_regex_group(self, text, regex):
         p = re.compile(regex)
@@ -53,24 +53,35 @@ class fda_drug(object):
         arr = self.params[param]
         res = max(arr)
         i = arr.index(res)
-        return res, self.parsed_ind[i], self.drug, self.date
+        return res, self.parsed_ind[i], self.drug
 
 
 class res_ind(object):
+
     def __init__(self, indication, data):
         self.indication = indication
-        self.data = data
         self.best_res = []
+        self.data = data
 
-    def determine_matches(self, fda_drugs, match_limit=60):
+    def match_database_cols(self, drug, drugs, dat, col_nos):
+        try:
+            i = drugs.index(drug)
+        except Exception as e:
+            print ("drug not found: %s" % drug)
+            return [[]]*len(col_nos)
+        arr = [dat[i][col] for col in col_nos]
+        return arr
+
+    def determine_matches(self, fda_drugs, drugs, dat, col_nos, match_limit=60):
         res = []
         for drug in fda_drugs:
             drug.get_stats(self.indication)
             res.append(drug.get_best_result("perc_match"))
         for r in res:
-            result, best, drug, date = r
+            result, best, drug = r
+            extra = self.match_database_cols(drug, drugs, dat, col_nos)
             if result >= match_limit:
-                self.best_res.append([best, result, drug, date])
+                self.best_res.append([best, result, drug] + extra)
         return 0
 
 # Matches between indication and FDA drug, given indication
@@ -106,9 +117,13 @@ class match(object):
         self.fda_drugs = [fda_drug(drug) for drug in arr]
         return 0
 
-    def match_database(self, indication, dat, headers):
-        d = disease()
+    def _setup_match_stata(self, fin):
+        dat = d.get_stata_database(fin)
         inds = d._lower_arr(d.get_database_indications(dat, "indication_new", False))
+        return inds, dat
+
+    def match_database_stata(self, indication, inds, dat, headers):
+        d = disease()
         try:
             i = inds.index(indication)
         except Exception as e:
@@ -116,18 +131,25 @@ class match(object):
         arr = [d.get_database_indications(dat, head, False)[i] for head in headers]
         return arr
 
-    def do_all_drugs(self, fin, fda_drugs, data_headers):
+    def _setup_match_database(self, fin):
         d = disease()
-        dat = d.get_stata_database(fin)
-        for ind in self.indications:
-            extra_data = self.match_database(ind, dat, data_headers)
-            r = res_ind(ind, extra_data)
-            r.determine_matches(fda_drugs)
-            self.res.append(r)
-        return self.res
+        dat = d.get_csv_database(fin)
+        inds = d._lower_arr(self._get_col(fin, 1, 1))
+        return inds, dat
 
-    def _format_res(self, headers):
-        whole = [["indication_new", "matched_indication", "score", "fda_drug", "date"] + headers]
+    def do_all_drugs(self, fda_drugs, fin, match_rate=60, col_nos=[], data_headers=[]):
+        d = disease()
+        drugs, dat = self._setup_match_database(fin)
+        for ind in self.indications:
+            # extra_data = self.match_database_stata(ind, inds, dat, data_headers)
+            r = res_ind(ind, [])
+            r.determine_matches(fda_drugs, drugs, dat, col_nos, match_rate)
+            self.res.append(r)
+        return 0
+
+    def _format_res(self, fda_headers, stata_headers):
+        whole = [["indication_new", "matched_indication", "score", "fda_drug"] + \
+                 fda_headers + stata_headers]
         for r in self.res:
             for b in r.best_res:
                 arr = [r.indication] + b + r.data

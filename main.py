@@ -26,26 +26,27 @@ def setup_dictionary():
     return 0
 
 if __name__ == "__main__":
-
     main_dat = "./data/Indication_USA_broad_narrow_states_subset_top15_OneDrugPerFirm.dta"
     long_dat = "./data/Indication_USA.dta"
+    fda_dir = "./data/FDA Generics Listing June 29 2018.csv"
 
     m = match()
     m.set_indications(main_dat)
 
     # parse through database indications
-    inds = m._get_col("./results/uptodate_indications.csv", 3, 1)
-    fdas = m._get_col("./results/uptodate_indications.csv", 0, 1)
-    dates = m._get_col("./results/uptodate_indications.csv", 1, 1)
+    utd_inds = m._get_col("./results/uptodate_indications.csv", 2, 1)
+    utd_drugs = m._get_col("./results/uptodate_indications.csv", 0, 1)
 
-    fda_drugs = []
-    for i, drug in enumerate(fdas):
-        f = fda_drug(drug, inds[i], dates[i])
+    drugs = []
+    for i, drug in enumerate(utd_drugs):
+        f = fda_drug(drug, utd_inds[i])
         f.parse_indications()
-        fda_drugs.append(f)
+        drugs.append(f)
 
     # match indication with fda diseases
-    headers = []
-    m.do_all_drugs(long_dat, fda_drugs, headers)
-    data = m._format_res(headers)
+    fda_headers = ["dates"]
+    col_nos = [5]
+    stata_headers = []
+    m.do_all_drugs(drugs, fda_dir, 60, col_nos, stata_headers)
+    data = m._format_res(fda_headers, stata_headers)
     m._arr_to_csv_2d(data, "./res.csv", True)

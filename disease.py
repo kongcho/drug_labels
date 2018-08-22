@@ -63,6 +63,12 @@ class disease(object):
     def get_stata_database(self, fin):
         return pd.io.stata.read_stata(fin)
 
+    def get_csv_database(self, fin):
+        with open(fin, "rb") as f:
+            r = csv.reader(f, delimiter=",")
+            data = list(r)
+        return data
+
     def get_database_indications(self, data, heading, get_uniques=True):
         drugs = data[heading]
         parsed_drugs = []
@@ -79,14 +85,14 @@ class disease(object):
             return list(set(parsed_drugs))
         return parsed_drugs
 
-    def get_fda_drugs(self, fin):
+    def get_fda_drugs(self, fin, col_no=0):
         drugs = []
         re_str = "\s*\[\d+\]\s*([\x00-\x7F]+)"
         with open(fin, "r") as f:
             next(f)
             r = csv.reader(f, delimiter=",", skipinitialspace=True)
             for row in r:
-                line = row[0].replace("\\n", " ")
+                line = row[col_no].replace("\\n", " ")
                 drug = self._get_regex_group(line, re_str)
                 drugs.append(drug)
         return drugs

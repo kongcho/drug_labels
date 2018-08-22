@@ -7,6 +7,7 @@ from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 import re
 
+# pull list of indications for given FDA drug from UpToDate
 class indication(object):
     def __init__(self):
         self.base_url = "https://www.uptodate.com"
@@ -27,7 +28,7 @@ class indication(object):
 
     def _setup_error(self, error_str, name=""):
         self.error = error_str
-        print("Error: {0} - {1}".format(name, error_str))
+        print("Indication Error: {0} - {1}".format(name, error_str))
         return None
 
     def _get_regex_group(self, text, regex):

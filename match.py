@@ -1,65 +1,138 @@
-import pandas as pd
-import csv
+from disease import disease, dic
+
 import re
-from parse import indication
+import csv
+from fuzzywuzzy import fuzz
 
-class disease(object):
-    def __init__(self):
-        pass
-
-    def _format_arr(self, arr, sep=","):
-        return sep.join(str(i) for i in arr)
-
-    def _lower_arr(self, arr):
-        return [x.lower() for x in arr]
+# Parse through list of indications
+class fda_drug(object):
+    def __init__(self, drug, indications, date):
+        self.drug = drug
+        self.unparsed_ind = indications
+        self.date = date
 
     def _get_regex_group(self, text, regex):
         p = re.compile(regex)
         m = p.search(text)
+        if not m:
+            return None
         word = m.groups()[0].strip()
         return word
 
-    def get_database_indications(self, fin):
-        data = pd.io.stata.read_stata(fin)
-        drugs = data["drugname"]
-        parsed_drugs = []
-        for line in drugs:
-            result = line.split(" - ")
-            parsed_drug = result[0].strip(" ")
-            parsed_drugs.append(parsed_drug)
-        uniques = list(set(parsed_drugs))
-        return uniques
+    def _parse_indications(self):
+        remed = self.unparsed_ind.replace(", ", ";")
+        remeds = remed.split(",")
+        parsed_inds = []
+        for med in remeds:
+            parsed_inds.append(med.split(";")[0].strip())
+        return parsed_inds
+
+    def parse_indications(self):
+        self.parsed_ind = self._parse_indications()
+
+    def _calc_perc_match(self, base_word, input_word):
+        total = len(base_word)
+        perc = fuzz.token_sort_ratio(base_word, input_word)
+        return perc
+
+    def do_close_match(self, indication):
+        self.params["perc_match"] = []
+        arr = self.params["perc_match"]
+        for candidate in self.parsed_ind:
+            # if self._calc_perc_match(indication, candidate) == 100:
+            #     print indication, candidate, self._calc_perc_match(indication, candidate)
+            arr.append(self._calc_perc_match(indication, candidate))
+        return 0
+
+    def get_stats(self, indication):
+        self.params = {}
+        self.do_close_match(indication)
+        return 0
+
+    def get_best_result(self, param):
+        arr = self.params[param]
+        res = max(arr)
+        i = arr.index(res)
+        return res, self.parsed_ind[i], self.drug, self.date
+
+
+class res_ind(object):
+    def __init__(self, indication, data):
+        self.indication = indication
+        self.data = data
+        self.best_res = []
+
+    def determine_matches(self, fda_drugs, match_limit=60):
+        res = []
+        for drug in fda_drugs:
+            drug.get_stats(self.indication)
+            res.append(drug.get_best_result("perc_match"))
+        for r in res:
+            result, best, drug, date = r
+            if result >= match_limit:
+                self.best_res.append([best, result, drug, date])
+        return 0
+
+# Matches between indication and FDA drug, given indication
+class match(object):
+    def __init__(self):
+        self.indications = []
+        self.dates = []
+        self.res = []
+
+    def _setup_error(self, error_str, name=""):
+        self.error = error_str
+        print("Match Error: {0} - {1}".format(name, error_str))
+        return None
+
+    def _get_col(self, fin, col_no, skip_rows=0):
+        arr = []
+        with open(fin, "r") as f:
+            for _ in range(skip_rows):
+                next(f)
+                r = csv.reader(f, delimiter=",", skipinitialspace=True)
+            for row in r:
+                arr.append(row[col_no])
+        return arr
+
+    def set_indications(self, fin):
+        d = disease()
+        dat = d.get_stata_database(fin)
+        self.indications = d._lower_arr(d.get_database_indications(dat, "indication_new", True))
+        return 0
 
     def get_fda_drugs(self, fin):
-        drugs = []
-        re_str = "\s*\[\d+\]\s*([\x00-\x7F]+)"
-        with open(fin, "r") as f:
-            next(f)
-            r = csv.reader(f, delimiter=",", skipinitialspace=True)
-            for row in r:
-                line = row[0].replace("\\n", " ")
-                drug = self._get_regex_group(line, re_str)
-                drugs.append(drug)
-        return drugs
+        arr = self._get_col(fin, 3, 1)
+        self.fda_drugs = [fda_drug(drug) for drug in arr]
+        return 0
 
-    def get_fda_indications(self, drugs, find, ffail):
-        results = []
-        failed = []
-        i = indication()
-        if i is None:
-            failed.append([drug, i.error])
-        for icount, drug in enumerate(drugs):
-            result = i.get_drug_indications(drug)
-            if result and result[1]:
-                result[1] = self._format_arr(result[1])
-                result = [drug] + result + [i.url]
-                results.append(result)
-                d._arr_to_csv_2d([result], find, False)
-            else:
-                fails = [drug, i.error]
-                failed.append(fails)
-                d._arr_to_csv_2d([fails], ffail, False)
-        return results, failed
+    def match_database(self, indication, dat, headers):
+        d = disease()
+        inds = d._lower_arr(d.get_database_indications(dat, "indication_new", False))
+        try:
+            i = inds.index(indication)
+        except Exception as e:
+            return self._setup_error("indication not found", indication)
+        arr = [d.get_database_indications(dat, head, False)[i] for head in headers]
+        return arr
+
+    def do_all_drugs(self, fin, fda_drugs, data_headers):
+        d = disease()
+        dat = d.get_stata_database(fin)
+        for ind in self.indications:
+            extra_data = self.match_database(ind, dat, data_headers)
+            r = res_ind(ind, extra_data)
+            r.determine_matches(fda_drugs)
+            self.res.append(r)
+        return self.res
+
+    def _format_res(self, headers):
+        whole = [["indication_new", "matched_indication", "score", "fda_drug", "date"] + headers]
+        for r in self.res:
+            for b in r.best_res:
+                arr = [r.indication] + b + r.data
+                whole.append(arr)
+        return whole
 
     def _arr_to_csv_2d(self, arr, fout, replace=True):
         if replace:
@@ -72,30 +145,6 @@ class disease(object):
                 w.writerow(row)
         return 0
 
-    def get_first_row(self,fin):
-        arr = []
-        with open(fin, "r") as f:
-            r = csv.reader(f, delimiter=",", skipinitialspace=True)
-            for row in r:
-                arr.append(row[0])
-        return arr
-
-def get_indications():
-    d = disease()
-
-    # gets indications for fda drugs based to UpToDate
-    fda_dir = "./data/Generic Drug Indications.csv"
-    fda_drugs = d._lower_arr(d.get_fda_drugs(fda_dir))
-    results, failed = d.get_fda_indications(fda_drugs, \
-                                            "./results/indications.csv", "./results/failed.csv")
-
-    # results: [fda_drug_name, chemical_name, indications, info_url]
-    d._arr_to_csv_2d(results, "./results/indications_all.csv")
-    # failed: ([fda_drug_name, error_code]
-    d._arr_to_csv_2d(failed, "./results/failed_all.csv")
-
 if __name__ == "__main__":
-    d = disease()
-
-    anita_dir = "./data/Indication_USA.dta"
-    data_drugs = d._lower_arr(d.get_database_indications(anita_dir))
+    m = match()
+    print m.match_database("vaginal atrophy", "./data/Indication_USA.dta", ["year", "month"])
